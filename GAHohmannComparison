@@ -1,0 +1,136 @@
+% Constants
+mu = 398600;  % Gravitational parameter of Earth [km^3/s^2]
+r1 = 7000;    % Initial orbit radius [km]
+r2 = 10000;   % Target orbit radius [km]
+
+% Genetic Algorithm parameters
+populationSize = 50;  % Number of individuals in the population
+numGenerations = 100; % Number of generations
+numSteps = 2;         % Number of impulsive burns (same as Hohmann transfer)
+mutationRate = 0.05;  % Mutation probability
+crossoverRate = 0.8;  % Crossover probability
+
+% Initial random population (representing thrust directions)
+population = rand(populationSize, numSteps * 2);  % Thrust angles and magnitudes
+
+% Preallocate fitness array for storing results
+fitness = zeros(populationSize, 1);
+
+
+
+% GA loop for multiple generations
+for generation = 1:numGenerations
+    
+    % Evaluate fitness (fuel consumption) of each individual
+    for i = 1:populationSize
+        thrustSequence = population(i, :);
+        fitness(i) = evaluateThrustSequence(thrustSequence, r1, r2, mu);
+    end
+    
+    % Select individuals based on fitness (lower deltaV is better)
+    selectedPopulation = selectRoulette(population, fitness);
+    
+    % Apply crossover to generate new population
+    newPopulation = applyCrossover(selectedPopulation, crossoverRate);
+    
+    % Apply mutation to introduce diversity
+    mutatedPopulation = applyMutation(newPopulation, mutationRate);
+    
+    % Update the population
+    population = mutatedPopulation;
+    
+    % Display best fitness of the generation
+    [bestFitness, bestIndex] = min(fitness);  % We minimize fuel consumption
+    fprintf('Generation %d: Best deltaV = %.5f km/s\n', generation, bestFitness);
+end
+
+% Final GA solution
+[bestFitness, bestIndex] = min(fitness);
+bestThrustSequence = population(bestIndex, :);
+fprintf('Optimal deltaV found by GA: %.5f km/s\n', bestFitness);
+
+% Hohmann transfer calculations
+% Burn 1: At perigee (first circular orbit)
+v1 = sqrt(mu / r1);  % Velocity in initial orbit
+a_transfer = (r1 + r2) / 2;  % Semi-major axis of the transfer orbit
+v_transfer_perigee = sqrt(2 * mu * (1/r1 - 1/(2 * a_transfer)));  % Velocity at perigee of transfer orbit
+
+% Burn 2: At apogee (target circular orbit)
+v_transfer_apogee = sqrt(2 * mu * (1/r2 - 1/(2 * a_transfer)));  % Velocity at apogee of transfer orbit
+v2 = sqrt(mu / r2);  % Velocity in target orbit
+
+% Delta V for Hohmann transfer
+deltaV_hohmann = abs(v_transfer_perigee - v1) + abs(v2 - v_transfer_apogee);
+fprintf('DeltaV for Hohmann transfer: %.5f km/s\n', deltaV_hohmann);
+
+
+%% Function to evaluate fuel usage for a given thrust sequence
+function deltaV = evaluateThrustSequence(thrustSequence, r1, r2, mu)
+    % Simplified evaluation of fuel consumption for impulsive burns
+    % thrustSequence: contains magnitudes and angles of thrust
+    
+    % Step 1: Calculate initial velocity in the initial orbit
+    v1 = sqrt(mu / r1);  % Circular orbit velocity at r1
+    
+    % Step 2: Compute the semi-major axis of the transfer orbit
+    a_transfer = (r1 + r2) / 2;  % Semi-major axis of the transfer orbit
+    
+    % Step 3: Compute velocity at perigee (initial point) and apogee
+    v_transfer_perigee = sqrt(2 * mu * (1/r1 - 1/(2 * a_transfer)));  % Perigee velocity
+    v_transfer_apogee = sqrt(2 * mu * (1/r2 - 1/(2 * a_transfer)));    % Apogee velocity
+    
+    % Step 4: Calculate deltaV for each thrust impulse
+    deltaV1 = abs(v_transfer_perigee - v1);   % First burn at perigee (r1)
+    deltaV2 = abs(v_transfer_apogee - sqrt(mu / r2));  % Second burn at apogee (r2)
+    
+    % Total deltaV (fuel consumption)
+    deltaV = deltaV1 + deltaV2;
+end
+
+%% Function for roulette wheel selection based on fitness
+function selectedPop = selectRoulette(population, fitness)
+    totalFitness = sum(fitness);
+    prob = fitness / totalFitness;
+    cumulativeProb = cumsum(prob);
+    populationSize = size(population, 1);
+    numGenes = size(population, 2);
+    selectedPop = zeros(populationSize, numGenes);
+    
+    for i = 1:populationSize
+        r = rand();
+        selectedIndex = find(cumulativeProb >= r, 1);
+        selectedPop(i, :) = population(selectedIndex, :);
+    end
+end
+
+%% Function to apply crossover
+function newPop = applyCrossover(population, crossoverRate)
+    populationSize = size(population, 1);
+    numGenes = size(population, 2);
+    newPop = population;
+    
+    for i = 1:2:populationSize
+        if rand() < crossoverRate
+            parent1 = population(i, :);
+            parent2 = population(i+1, :);
+            crossoverPoint = randi([1, numGenes-1]);
+            newPop(i, :) = [parent1(1:crossoverPoint), parent2(crossoverPoint+1:end)];
+            newPop(i+1, :) = [parent2(1:crossoverPoint), parent1(crossoverPoint+1:end)];
+        end
+    end
+end
+
+%% Function to apply mutation
+function mutatedPop = applyMutation(population, mutationRate)
+    populationSize = size(population, 1);
+    numGenes = size(population, 2);
+    mutatedPop = population;
+    
+    for i = 1:populationSize
+        for j = 1:numGenes
+            if rand() < mutationRate
+                mutatedPop(i, j) = rand();  % Random mutation
+            end
+        end
+    end
+end
