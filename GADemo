@@ -1,0 +1,118 @@
+% Compare Genetic Algorithm solution with standard mathematical optimization
+% for maximizing f(x) = x * sin(10 * pi * x) + 2, x in [0, 1]
+
+% Step 1: Genetic Algorithm solution
+% Genetic Algorithm parameters
+populationSize = 20;  % Number of individuals in the population
+numGenerations = 50;  % Number of generations to evolve
+mutationRate = 0.05;  % Probability of mutation (5%)
+crossoverRate = 0.8;  % Probability of crossover (80%)
+numGenes = 16;        % Number of genes (bits) to represent x
+
+% Create an initial random population
+population = randi([0 1], populationSize, numGenes);
+
+% Genetic Algorithm loop for several generations
+for generation = 1:numGenerations
+    % Evaluate the fitness of each individual in the population
+    fitness = zeros(populationSize, 1);
+    for i = 1:populationSize
+        x = decodeChromosome(population(i, :), numGenes);
+        fitness(i) = fitnessFunction(x);
+    end
+    
+    % Select individuals for reproduction based on fitness
+    selectedPopulation = selectRoulette(population, fitness);
+    
+    % Apply crossover to generate a new population
+    newPopulation = applyCrossover(selectedPopulation, crossoverRate);
+    
+    % Apply mutation to introduce random changes
+    mutatedPopulation = applyMutation(newPopulation, mutationRate);
+    
+    % Update the population for the next generation
+    population = mutatedPopulation;
+end
+
+% Final solution from Genetic Algorithm
+[bestFitness_GA, bestIndex] = max(fitness);
+bestX_GA = decodeChromosome(population(bestIndex, :), numGenes);
+fprintf('Genetic Algorithm: Best x = %.5f, Best fitness = %.5f\n', bestX_GA, bestFitness_GA);
+
+% Step 2: Standard Mathematical Optimization using fminbnd
+% fminbnd minimizes a function, so we minimize -f(x) to maximize f(x)
+objectiveFunction = @(x) -(x * sin(10 * pi * x) + 2);  % Negative of the function to maximize
+[x_fminbnd, neg_fminbnd] = fminbnd(objectiveFunction, 0, 1);
+
+% Convert the negative fitness value back to positive
+bestFitness_fminbnd = -neg_fminbnd;
+
+fprintf('Standard Optimization (fminbnd): Best x = %.5f, Best fitness = %.5f\n', x_fminbnd, bestFitness_fminbnd);
+
+%% Function to evaluate the fitness of a chromosome
+function fit = fitnessFunction(x)
+    % The function we want to maximize: f(x) = x * sin(10 * pi * x) + 2
+    fit = x * sin(10 * pi * x) + 2;
+end
+
+%% Function to decode the chromosome (binary string) into a real value of x
+function x = decodeChromosome(chromosome, numGenes)
+    % Convert binary chromosome to decimal, then scale to the range [0, 1]
+    decimalValue = bin2dec(num2str(chromosome));
+    x = decimalValue / (2^numGenes - 1);  % Scale to [0, 1]
+end
+
+%% Function for roulette wheel selection based on fitness
+function selectedPop = selectRoulette(population, fitness)
+    % Normalize fitness values to create a probability distribution
+    totalFitness = sum(fitness);
+    prob = fitness / totalFitness;
+    
+    % Cumulative probability distribution for selection
+    cumulativeProb = cumsum(prob);
+    
+    % Select individuals based on roulette wheel approach
+    populationSize = size(population, 1);
+    numGenes = size(population, 2);
+    selectedPop = zeros(populationSize, numGenes);
+    for i = 1:populationSize
+        r = rand();  % Random number between 0 and 1
+        selectedIndex = find(cumulativeProb >= r, 1);  % Select individual
+        selectedPop(i, :) = population(selectedIndex, :);
+    end
+end
+
+%% Function to apply crossover between pairs of individuals
+function newPop = applyCrossover(population, crossoverRate)
+    populationSize = size(population, 1);
+    numGenes = size(population, 2);
+    newPop = population;
+    
+    for i = 1:2:populationSize
+        if rand() < crossoverRate
+            % Select two parents
+            parent1 = population(i, :);
+            parent2 = population(i+1, :);
+            
+            % Apply crossover (single-point crossover)
+            crossoverPoint = randi([1, numGenes-1]);
+            newPop(i, :) = [parent1(1:crossoverPoint), parent2(crossoverPoint+1:end)];
+            newPop(i+1, :) = [parent2(1:crossoverPoint), parent1(crossoverPoint+1:end)];
+        end
+    end
+end
+
+%% Function to apply mutation to the population
+function mutatedPop = applyMutation(population, mutationRate)
+    populationSize = size(population, 1);
+    numGenes = size(population, 2);
+    mutatedPop = population;
+    
+    for i = 1:populationSize
+        for j = 1:numGenes
+            if rand() < mutationRate
+                mutatedPop(i, j) = ~population(i, j);  % Flip the gene
+            end
+        end
+    end
+end
